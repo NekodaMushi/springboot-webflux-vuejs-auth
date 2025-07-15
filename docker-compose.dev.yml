@@ -1,0 +1,32 @@
+services:
+  backend-dev:
+    image: maven:3.9.6-eclipse-temurin-21
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend:/app
+      - /app/target
+      - maven-cache:/root/.m2
+    working_dir: /app
+    command: mvn spring-boot:run
+    env_file:
+      - backend/.env
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_DEVTOOLS_RESTART_ENABLED=true
+      - JAVA_TOOL_OPTIONS=-Djava.net.preferIPv4Stack=true -Djavax.net.ssl.trustStore=/opt/java/openjdk/lib/security/cacerts -Djavax.net.ssl.trustStorePassword=changeit
+
+  frontend-dev:
+    image: node:20-alpine
+    working_dir: /app
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: sh -c "apk add --no-cache yarn && yarn install && yarn dev --host 0.0.0.0"
+    depends_on:
+      - backend-dev
+
+volumes:
+  maven-cache:
