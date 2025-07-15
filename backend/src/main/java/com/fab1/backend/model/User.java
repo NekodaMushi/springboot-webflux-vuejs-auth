@@ -61,6 +61,25 @@ public class User implements UserDetails {
                 .build();
     }
 
+    public Role getRole() {
+        return roles.isEmpty() ? null : roles.iterator().next();
+    }
+
+    public User withEnabled(boolean enabled) {
+        return User.builder()
+                .id(this.id)
+                .username(this.username)
+                .password(this.password)
+                .enabled(enabled)
+                .roles(new HashSet<>(this.roles))
+                .build();
+    }
+
+    public String getRoleName() {
+        Role role = getRole();
+        return role != null ? role.getName() : null;
+    }
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return roles.stream()

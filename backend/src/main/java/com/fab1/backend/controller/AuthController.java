@@ -2,13 +2,16 @@ package com.fab1.backend.controller;
 
 import com.fab1.backend.dto.LoginRequest;
 import com.fab1.backend.dto.LoginResponse;
+import com.fab1.backend.dto.UserResponse;
+import com.fab1.backend.model.User;
 import com.fab1.backend.service.AuthService;
+import com.fab1.backend.service.CustomUserDetailsService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
 import reactor.core.publisher.Mono;
 
 @RestController
@@ -19,6 +22,7 @@ import reactor.core.publisher.Mono;
 public class AuthController {
 
     private final AuthService authService;
+    private final CustomUserDetailsService userDetailsService;
 
     @PostMapping("/login")
     public Mono<LoginResponse> login(@Valid @RequestBody LoginRequest loginRequest) {
@@ -44,10 +48,54 @@ public class AuthController {
                         registerRequest.getPassword(),
                         "USER"
                 )
-                .then(authService.authenticate(registerRequest)) // Auto-login after registration
+                .then(authService.authenticate(registerRequest))
                 .onErrorResume(this::handleRegistrationError)
                 .doOnSuccess(response -> log.info("Inscription et connexion réussies pour: {}",
                         registerRequest.getUsername()));
+    }
+
+    @PostMapping("/logout")
+    public Mono<ResponseEntity<LoginResponse>> logout(Authentication authentication) {
+        String username = authentication != null ? authentication.getName() : "anonymous";
+        log.info("Déconnexion pour: {}", username);
+        
+        return Mono.just(ResponseEntity.ok(
+                LoginResponse.success(username, null).withMessage("Déconnexion réussie")
+        ));
+    }
+
+    @DeleteMapping("/delete-account")
+    public Mono<ResponseEntity<LoginResponse>> deleteAccount(Authentication authentication) {
+        String username = authentication.getName();
+        log.info("Suppression du compte pour: {}", username);
+
+        return userDetailsService.deleteUser(username)
+                .then(Mono.just(ResponseEntity.ok(
+                        LoginResponse.success(username, null).withMessage("Compte supprimé avec succès")
+                )))
+                .onErrorResume(error -> {
+                    log.error("Erreur lors de la suppression du compte {}: {}", username, error.getMessage());
+                    return Mono.just(ResponseEntity.badRequest().body(
+                            LoginResponse.failure("Erreur lors de la suppression du compte")
+                    ));
+                });
+    }
+
+    @GetMapping("/me")
+    public Mono<UserResponse> getCurrentUser(Authentication authentication) {
+        String username = authentication.getName();
+        log.debug("Récupération des informations pour: {}", username);
+
+        return userDetailsService.getUserByUsername(username)
+                .map(user -> UserResponse.builder()
+                        .username(user.getUsername())
+                        .enabled(user.isEnabled())
+                        .roleName(user.getRoleName())
+                        .build())
+                .onErrorResume(error -> {
+                    log.error("Erreur lors de la récupération de l'utilisateur {}: {}", username, error.getMessage());
+                    return Mono.error(new RuntimeException("Utilisateur non trouvé"));
+                });
     }
 
     @GetMapping("/test")
@@ -62,7 +110,6 @@ public class AuthController {
                 .doOnSuccess(message -> log.debug("Health check effectué"));
     }
 
-
     private Mono<LoginResponse> handleAuthenticationError(Throwable error) {
         log.error("Erreur d'authentification: {}", error.getMessage());
 
@@ -73,7 +120,6 @@ public class AuthController {
 
         return Mono.just(LoginResponse.serverError());
     }
-
 
     private Mono<LoginResponse> handleRegistrationError(Throwable error) {
         log.error("Erreur d'inscription: {}", error.getMessage());
@@ -87,10 +133,5 @@ public class AuthController {
         }
 
         return Mono.just(LoginResponse.serverError());
-    }
-    @PostMapping("/logout")
-    public Mono<ResponseEntity<Void>> logout() {
-        // Now only erase token, later need to create blacklist on db
-        return Mono.just(ResponseEntity.ok().build());
     }
 }

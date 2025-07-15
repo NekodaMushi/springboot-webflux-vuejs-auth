@@ -11,8 +11,10 @@
               type="text"
               required
               :disabled="loading"
+              placeholder="Choisissez un nom d'utilisateur"
           />
         </div>
+        
         <div class="form-group">
           <label for="password">Mot de passe</label>
           <input
@@ -21,8 +23,10 @@
               type="password"
               required
               :disabled="loading"
+              placeholder="Choisissez un mot de passe"
           />
         </div>
+        
         <div class="form-group">
           <label for="confirmPassword">Confirmer le mot de passe</label>
           <input
@@ -31,42 +35,58 @@
               type="password"
               required
               :disabled="loading"
+              placeholder="Confirmez votre mot de passe"
           />
         </div>
-        <button type="submit" :disabled="loading" class="btn-primary">
+        
+        <button type="submit" :disabled="loading || !isFormValid" class="btn-primary">
           {{ loading ? "Création..." : "Créer le compte" }}
         </button>
       </form>
+
       <div v-if="error" class="error-message">
         {{ error }}
       </div>
+
       <div v-if="success" class="success-message">
         {{ success }}
       </div>
+
       <div class="links">
-        <router-link to="/login">Déjà un compte ? Se connecter</router-link>
+        <span>Déjà un compte ? </span>
+        <router-link to="/login">Se connecter</router-link>
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import { ref } from "vue";
-import axios from "axios";
+import { ref, computed } from "vue";
 import { useRouter } from "vue-router";
+import { useAuthStore } from "../stores/auth";
 
 export default {
   name: "RegisterView",
   setup() {
     const router = useRouter();
+    const authStore = useAuthStore();
+
     const form = ref({
       username: "",
       password: "",
       confirmPassword: "",
     });
+
     const loading = ref(false);
     const error = ref(null);
     const success = ref(null);
+
+    const isFormValid = computed(() => {
+      return form.value.username.trim() && 
+             form.value.password.trim() && 
+             form.value.confirmPassword.trim() &&
+             form.value.password === form.value.confirmPassword;
+    });
 
     const handleRegister = async () => {
       error.value = null;
@@ -78,17 +98,26 @@ export default {
       }
 
       loading.value = true;
+
       try {
-        await axios.post("/api/auth/register", {
+        const result = await authStore.register({
           username: form.value.username,
           password: form.value.password,
         });
-        success.value = "Compte créé avec succès ! Vous pouvez vous connecter.";
-        setTimeout(() => router.push("/login"), 1500);
+
+        if (result.success) {
+          success.value = "Compte créé avec succès ! Redirection vers le dashboard...";
+          
+          // redirect to dashboard
+          setTimeout(() => router.push("/dashboard"), 1500);
+          
+          // redirect to login
+          // setTimeout(() => router.push("/login"), 1500);
+        } else {
+          error.value = authStore.error || "Erreur lors de la création du compte.";
+        }
       } catch (e) {
-        error.value =
-            e.response?.data?.message ||
-            "Erreur lors de la création du compte.";
+        error.value = "Erreur lors de la création du compte.";
       } finally {
         loading.value = false;
       }
@@ -99,6 +128,7 @@ export default {
       loading,
       error,
       success,
+      isFormValid,
       handleRegister,
     };
   },
@@ -181,5 +211,14 @@ input {
 .links {
   margin-top: 1rem;
   text-align: center;
+}
+
+.links a {
+  color: #007bff;
+  text-decoration: none;
+}
+
+.links a:hover {
+  text-decoration: underline;
 }
 </style>
